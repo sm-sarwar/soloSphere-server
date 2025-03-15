@@ -1,10 +1,18 @@
+require("dotenv").config();
 const express = require("express");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const cors = require("cors");
-require("dotenv").config();
+const jwt = require('jsonwebtoken');
+
 const port = process.env.PORT || 5000;
 
+
+// const corsOptions = {
+//   origin: ['http://localhost:5173'],
+//   Credential: true,
+//   optionalSuccessStatus: 200,
+// }
 // middleware
 app.use(cors());
 app.use(express.json());
@@ -25,9 +33,38 @@ async function run() {
     const jobsCollection = client.db("soloSphereDB").collection("jobs");
     const bidCollection = client.db("soloSphereDB").collection("bids");
 
+
+    // generate jwt 
+    // app.post('/jwt', async(req, res) =>{
+    //   const {email} = req.body
+    //   // create token 
+    //   const token = jwt.sign({email}, process.env.SECRET_KEY, { expiresIn: '1h' })
+    //   res.cookie("token", token,{
+    //     httpOnly: true,
+    //     secure:process.env.NODE_ENV ==='production',
+    //     sameSite:process.env.NODE_ENV ==='production'? 'none': 'strict'
+    //   })
+    //   .send({success: true})
+    // })
+
+
+    app.get ('/jobs', async (req, res) => {
+      const result = await jobsCollection.find().toArray();
+      res.send(result);
+    })
     // get all jobs
     app.get("/all-jobs", async (req, res) => {
-      const result = await jobsCollection.find().toArray();
+      const filter = req.query.filter
+      const search = req.query.search
+      const sort = req.query.sort
+      let options = {}
+      if(sort) options = {sort: {deadline : sort === 'asc' ? 1 : -1}}
+      let query = {job_title:{
+        $regex: search,
+        $options: "i"  // 'i' for case insensitive search
+      }}
+      if(filter) query.category = filter
+      const result = await jobsCollection.find(query, options).toArray();
       res.send(result);
     });
 
@@ -54,6 +91,30 @@ async function run() {
       const result = await bidCollection.find(query).toArray();
       res.send(result);
     });
+
+    // get all jobs from the database 
+    // app.get("/all-jobs", )
+
+    // bid request 
+    app.get('/bid-request/:email',async(req,res)=>{
+      const email = req.params.email;
+      const query = { buyer: email}
+      const result = await bidCollection.find(query).toArray();
+      res.send(result);
+    })
+
+  
+
+    app.patch('/bid-status-update/:id', async(req, res)=>{
+      const id = req.params.id;
+      const filter = {_id: new ObjectId(id)}
+      const {status} = req.body
+      const updated = {
+        $set: {status}
+      }
+      const result = await bidCollection.updateOne(filter, updated)
+      res.send(result)
+    })
 
     // post a bid request
     app.post("/bid", async (req, res) => {
@@ -109,9 +170,9 @@ async function run() {
       res.send(result);
     });
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
